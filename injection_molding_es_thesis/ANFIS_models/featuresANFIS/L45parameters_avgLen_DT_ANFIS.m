@@ -1,0 +1,133 @@
+%% index
+clc; % clear command window
+clear; % clear Workspace
+data_L45 = readtable(".\data\new_L45_index_weight_DT.xlsx");
+num_data_L45 = table2array(data_L45);
+
+% randperm 隨機打亂一個數字序列
+% s = rng;
+n = randperm(size(num_data_L45, 1));
+% rng(s);
+% n = [1, 27, 18, 25, 33, 2, 15, 13, 7, 11, 28, 5, 9, 8, 44, 36, 26, 10, 19, 12, 17, 6, 41, 42, 37, 22, 43, 32, 4, 23, 39, 29, 30, 20, 45, 21, 35, 40, 31, 14, 24, 34, 16, 3, 38]; % DT
+% n = [7, 30, 36, 40, 23, 20, 24, 4, 6, 25, 29, 32, 13, 8, 22, 5, 35, 27, 12, 41, 14, 21, 31, 11, 17, 42, 10, 19, 45, 37, 26, 43, 28, 9, 44, 3, 18, 15, 16, 2, 38, 34, 1, 33, 39]; % DT
+% n = [16, 37, 29, 14, 24, 31, 33, 38, 25, 41, 23, 27, 40, 3, 10, 26, 36, 8, 20, 39, 17, 45, 34, 2, 9, 5, 30, 11, 43, 18, 21, 13, 1, 19, 12, 15, 4, 32, 22, 7, 28, 42, 6, 44, 35]; % XG
+
+[rows, cols] = size(data_L45);
+training_set = 0.7;
+checking_set = 0.2;
+testing_set = 0.1;
+training_num = ceil(rows*training_set);
+testing_num = ceil(rows*testing_set);
+validaion_num = rows-training_num-testing_num;
+
+% 特徵index
+feaures_index_DT = [2:7];
+
+training_data = num_data_L45(n(1:training_num), feaures_index_DT);
+checking_data = num_data_L45(n(training_num+1:training_num+validaion_num), feaures_index_DT);
+testing_data = num_data_L45(n(training_num+validaion_num+1:end), feaures_index_DT);
+
+[rows_f, cols_f] = size(feaures_index_DT);
+
+genOpt = genfisOptions("GridPartition");
+genOpt.NumMembershipFunctions = 2;
+% genOpt.InputMembershipFunctionType = ["gaussmf", "gbellmf", "gbellmf", "gbellmf", "gbellmf", "gbellmf"];
+genOpt.InputMembershipFunctionType = "gaussmf";
+genOpt.OutputMembershipFunctionType = "constant";
+inFIS = genfis(training_data(:, [1:cols_f-1]), training_data(:, cols_f), genOpt);
+
+epoch = 1000 ;
+errorGoal = 0;
+opt = anfisOptions("InitialFIS", inFIS, "EpochNumber", epoch, "ErrorGoal", errorGoal);
+% opt = anfisOptions("InitialFIS", inFIS, "EpochNumber", epoch, "InitialStepSize", 0.01);
+
+% checking data
+opt.ValidationData = checking_data;
+training_start = datetime(now,"ConvertFrom","datenum");
+[fis2, trainError, stepSize, chkFIS, chkError] = anfis(training_data, opt);
+training_end = datetime(now,"ConvertFrom","datenum");
+
+% disp(training_start)
+% disp(training_end)
+
+disp("traing time:")
+disp(training_end-training_start)
+
+% show rules
+% showrule(fis2)
+% figure
+% plotmf(fis2, "input", 1) % show membership function
+% figure
+% plotmf(fis2, "input", 2)
+
+% anfis output
+predict_training_data = evalfis(fis2, training_data(:, [1:cols_f-1]));
+predict_checking_data = evalfis(fis2, checking_data(:, [1:cols_f-1]));
+predict_testing_data = evalfis(fis2, testing_data(:, [1:cols_f-1]));
+
+% training data
+x = training_data(:, [1:cols_f-1]);
+[numRows_train, numCols_train] = size(training_data);
+x_axis = (1:numRows_train);
+figure
+plot(x_axis,training_data(:,cols_f),"or",x_axis,predict_training_data,"*b")
+legend("Training Data","ANFIS Output")
+title("ANFIS weight prediction (training data)")
+xlabel("No") 
+ylabel("Weight (g)") 
+
+% checking data
+figure
+[numRows_check, numCols_check] = size(checking_data);
+x_check = (1:numRows_check);
+plot(x_check,checking_data(:,cols_f),"or",x_check, predict_checking_data,"*b")
+legend("Checking Data","ANFIS Output")
+title("ANFIS warpage prediction (checking data)")
+xlabel("No") 
+ylabel("Weight (g)") 
+
+% testing data
+figure
+[numRows_test, numCols_test] = size(testing_data);
+x_test = (1:numRows_test);
+plot(x_test,testing_data(:,cols_f),"or",x_test,predict_testing_data,"*b")
+legend("Testing Data","ANFIS Output")
+title("ANFIS weight prediction (testing data)")
+xlabel("No") 
+ylabel("Weight (g)") 
+
+
+% training error
+figure
+plot((1:epoch), trainError, 'or')
+legend("trainError")
+title("Training Error")
+xlabel("Epoch") 
+ylabel("Error (g)") 
+
+figure
+plot((1:epoch), chkError, 'b*')
+legend("chkError")
+title("Check Error")
+xlabel("Epoch") 
+ylabel("Error (g)") 
+
+
+% RMSE 
+% train
+y_train = training_data(:, cols_f);
+y_hat_train = predict_training_data;
+% test
+y_test = testing_data(:, cols_f);
+y_hat_test = predict_testing_data;
+% check
+y_check = checking_data(:, cols_f);
+y_hat_check = predict_checking_data;
+
+RMSE_train = f_rmse(y_train, y_hat_train)
+RMSE_test = f_rmse(y_test, y_hat_test)
+RMSE_check = f_rmse(y_check, y_hat_check)
+
+% MAPE_train = f_mape(y_train, y_hat_train)
+% MAPE_test = f_mape(y_test, y_hat_test)
+% MAPE_check = f_mape(y_check, y_hat_check)
